@@ -101,9 +101,9 @@ bun run build
 
 ## Status
 
-Milestone 1 (bridge core) and the plugin side of Milestone 3 are implemented. Milestone 2 and the fork-owned runtime composition entry live in the Pixel Agents fork. The read-only Orca event-surface spike behind these decisions is documented in [`docs/event-surface-spike.md`](docs/event-surface-spike.md).
+All four milestones are implemented. The bridge, the `StreamProvider` seam and the composition host that joins them have been verified against live Orca agents: real Claude, Codex and Antigravity sessions render in the office with their room and display name. The read-only Orca event-surface spike behind these decisions is documented in [`docs/event-surface-spike.md`](docs/event-surface-spike.md).
 
-Product and architecture decisions are recorded in [`GLOSSARY.md`](GLOSSARY.md), [`docs/adr/`](docs/adr/), and [`docs/implementation-plan.md`](docs/implementation-plan.md). Polling is the permanent architecture; Orca itself is never modified (ADR 0001).
+Product and architecture decisions are recorded in [`GLOSSARY.md`](GLOSSARY.md), [`docs/adr/`](docs/adr/), and [`docs/implementation-plan.md`](docs/implementation-plan.md). Polling remains the implementation; note the correction recorded in ADR 0001, which found that Orca does expose an `agent.status.changed` plugin event and that the ADR's original premise was wrong.
 
 ## Distribution
 
@@ -126,7 +126,7 @@ If `mtb77/pixel-agents` is private, add a repository Actions secret named `PIXEL
 
 The `Release` workflow runs only for tags matching `v*`. Before publishing, it requires the tag to equal `v` plus the version in `package.json`, builds and verifies the packed artifact under plain Node.js, checks that the version is not already present on npm, and requires an `NPM_TOKEN` repository secret with publish access. It publishes with npm provenance using GitHub's OIDC token.
 
-The package currently declares `"license": "UNLICENSED"`. The release workflow deliberately refuses to publish while that value remains; choosing and changing the package license is an owner decision that must happen before the first release.
+The package is MIT licensed. It bundles a build of Pixel Agents, which is also MIT; its character sprites derive from a CC0 pack. See [`LICENSE`](LICENSE) for the full attribution. The release workflow still refuses to publish if the license is ever set back to `UNLICENSED`.
 
 ## Related project
 
@@ -135,25 +135,19 @@ The Pixel Agents integration fork is checked out next to this repository as `../
 ## Intended responsibilities
 
 - Start, stop, and inspect the Pixel Agents runtime.
-- Open the authenticated local office URL in an Orca browser tab without logging its bearer token.
-- Connect all Orca-managed agent types through one Orca adapter.
-- Keep harness-specific behavior out of the plugin whenever Orca already exposes it generically.
+- Hand the authenticated local office URL to a browser window without logging its bearer token.
+- Project all Orca-managed agent types through one bridge.
+- Keep harness-specific behavior out of the bridge whenever Orca already exposes it generically.
 
 ## Development
 
-Validate the plugin manifest and structure with:
-
-```bash
-python3 /Users/sascha/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .
+```sh
+bun install
+bun test
+bun run build
+bun run live-verify
 ```
 
-## Marketplace
+This project is not an Orca plugin. Orca's plugin API (`orca-plugin.json`) contributes panels, commands, events, language packs, keybindings, VM recipes and agent profiles, and its panels run under a sandbox that forbids network access, so it cannot host this office. The office is a local web app opened in a browser window instead. See [ADR 0004](docs/adr/0004-browser-window-not-orca-plugin-panel.md).
 
-This repository serves as a self-contained Orca plugin marketplace via its root `orca-marketplace.json` manifest.
-
-To add this marketplace and install the plugin in Orca:
-1. In Orca, open Settings and navigate to the plugin marketplace configuration.
-2. Add this repository's Git URL (`https://github.com/mtb77/orca-pixel-office.git`) as a marketplace source.
-3. Discover and install **Orca Pixel Office** (`mtb77.orca-pixel-office`) from the available plugins list.
-
-*(Note: Orca currently manages external plugin marketplaces and plugin installations via the Orca graphical interface rather than dedicated CLI commands.)*
+`skills/pixel-office/SKILL.md` is a Claude/Codex skill, not an Orca contribution.

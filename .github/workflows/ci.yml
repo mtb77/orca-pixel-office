@@ -77,3 +77,16 @@ jobs:
             exit 1
           fi
           PATH="$plain_path" node scripts/verify-packed.mjs "$TARBALL"
+
+      - name: Verify packed office asset handshake with plain Node.js
+        shell: bash
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          node_bin="$(dirname "$(command -v node)")"
+          plain_path="$node_bin:/usr/local/bin:/usr/bin:/bin"
+          if PATH="$plain_path" command -v bun >/dev/null 2>&1; then
+            echo "Bun unexpectedly remains available during packed office verification." >&2
+            exit 1
+          fi
+          PATH="$plain_path" node .github/verify-office-assets.mjs "$TARBALL"
