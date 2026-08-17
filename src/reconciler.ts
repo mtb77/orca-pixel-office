@@ -1,3 +1,4 @@
+import { formatAgentType, formatBranch, formatDisplayName, formatRoomName } from './labels.js';
 import { canonicalToolName } from './tools.js';
 import type { AgentEventEnvelope, NormalizedAgent, SessionMeta, Snapshot } from './types.js';
 
@@ -34,13 +35,16 @@ export class Reconciler {
         const sessionId = `${key}:${incarnationId ?? 'unknown'}`;
         previous = { agent, sessionId, ...(incarnationId ? { incarnationId } : {}), lastUpdated: snapshot.collectedAt };
         this.tracked.set(key, previous);
-        const agentType = agent.agentType ?? 'Agent'; const branch = agent.placement.branch;
-        this.meta.set(sessionId, { roomId: agent.repoId ?? agent.placement.repo ?? 'unknown', displayName: branch ? `${agentType} / ${branch}` : agentType, agentType, ...(branch ? { branch } : {}), ...(agent.hostId ? { hostId: agent.hostId } : {}), remote: Boolean(agent.hostId && agent.hostId !== 'local') });
+        const agentType = formatAgentType(agent.agentType);
+        const branch = formatBranch(agent.placement.branch);
+        const roomId = formatRoomName(agent.placement, agent.repoId);
+        const displayName = formatDisplayName(agent.agentType, agent.placement.branch);
+        this.meta.set(sessionId, { roomId, displayName, agentType, ...(branch ? { branch } : {}), ...(agent.hostId ? { hostId: agent.hostId } : {}), remote: Boolean(agent.hostId && agent.hostId !== 'local') });
         events.push(envelope(sessionId, { kind: 'sessionStart', source: 'orca', ...(agent.placement.path ? { cwd: agent.placement.path } : {}) }));
         if (agent.parentPaneKey) {
           const parentIncarnation = terminals.get(agent.parentPaneKey)?.incarnationId ?? 'unknown';
           const parentToolId = `${agent.runtimeId}:${agent.parentPaneKey}:${parentIncarnation}:spawn:${agent.paneKey}`;
-          events.push(envelope(sessionId, { kind: 'subagentStart', parentToolId, toolId: sessionId, toolName: agent.agentType ?? 'Agent' }));
+          events.push(envelope(sessionId, { kind: 'subagentStart', parentToolId, toolId: sessionId, toolName: agentType }));
         }
       }
       if (!previous.incarnationId && incarnationId) {

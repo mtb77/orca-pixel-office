@@ -52,6 +52,19 @@ Keep the default loopback bind unless remote access has been deliberately secure
 
 The runtime prefers `vendor/pixel-agents/`, then falls back to the sibling development checkout at `../pixel-agents-orca`. A usable build must contain both `dist/stream-runtime.js` and `dist/webview/index.html`. The runtime entry is the fork-owned generic composition host: it receives the token, bind configuration, and bridge module path over Node IPC and reports readiness and office-client counts over the same channel. The bridge module must export a named, zero-argument `createStreamProvider()` factory. The ordinary `dist/cli.js` is intentionally not used because it owns a different token lifecycle and cannot compose the plugin's stream provider.
 
+## Scripts
+
+### `bun run live-verify`
+
+Starts the runtime, connects one office client, and prints every agent the bridge projects with its room and display name, then shuts the runtime down. Use it to check the projection against real Orca agents after changing the collector, reconciler, or labels.
+
+```sh
+bun run build
+bun run live-verify
+```
+
+Prerequisites: a built Pixel Agents runtime resolvable per Runtime lookup, and a running Orca app with at least one agent. The script prints no bearer token.
+
 ## Bridge core
 
 - `src/collector.ts` polls `orca worktree ps --json` and `orca terminal list --json`, with configurable jittered intervals and a connected-client gate.

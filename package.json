@@ -6,7 +6,8 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "bun test ./test/*.ts"
+    "test": "bun test ./test/*.ts",
+    "live-verify": "bun run scripts/live-verify.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

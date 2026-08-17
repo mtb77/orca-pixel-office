@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SnapshotCollector } from '../src/collector.js';
+import { formatAgentType, formatBranch, formatDisplayName, formatRoomName } from '../src/labels.js';
 import { normalizeTerminals, normalizeWorktrees, safeCliError } from '../src/normalizer.js';
 import { OrcaBridgeProvider } from '../src/provider.js';
 import { Reconciler } from '../src/reconciler.js';
@@ -10,14 +11,59 @@ import { PluginRuntime, findPixelAgentsRuntime, type RuntimeLauncher, type Runti
 import type { Snapshot } from '../src/types.js';
 
 const paneKey = 'tab:leaf';
-const raw = { result: { worktrees: [{ worktreeId:'wt', runtimeId:'rt', repoId:'repo', hostId:'host', path:'/safe', branch:'feat/x', prompt:'secret prompt', taskTitle:'secret title', displayName:'secret name', agents:[{ paneKey, agentType:'codex', state:'working', toolName:'mystery_tool', updatedAt:'2026-08-17T10:00:00Z', prompt:'agent secret', toolInput:{ token:'secret input' }, lastAssistantMessage:'secret assistant', preview:'secret preview' }] }] } };
+const raw = { result: { worktrees: [{ worktreeId:'wt', runtimeId:'rt', repoId:'repo-uuid', repo:'sample-repo', hostId:'host', path:'/safe', branch:'refs/heads/feat/x', prompt:'secret prompt', taskTitle:'secret title', displayName:'secret name', agents:[{ paneKey, agentType:'codex', state:'working', toolName:'mystery_tool', updatedAt:'2026-08-17T10:00:00Z', prompt:'agent secret', toolInput:{ token:'secret input' }, lastAssistantMessage:'secret assistant', preview:'secret preview' }] }] } };
 const terminalRaw = { result: { terminals: [{ tabId:'tab', leafId:'leaf', handle:'term', incarnationId:'inc', preview:'secret preview', title:'secret title' }] } };
-const snapshot = (state='working', toolName: string | undefined='mystery_tool', terminals=true, updatedAt='2026-08-17T10:00:00Z'): Snapshot => ({ collectedAt:Date.parse('2026-08-17T10:00:01Z'), agents:[{ runtimeId:'rt', paneKey, repoId:'repo', terminal:{}, placement:{path:'/safe',branch:'feat/x'}, agentType:'codex', state, ...(toolName ? {toolName}:{}), updatedAt }], terminals:terminals?normalizeTerminals(terminalRaw):[] });
+const snapshot = (state='working', toolName: string | undefined='mystery_tool', terminals=true, updatedAt='2026-08-17T10:00:00Z'): Snapshot => ({ collectedAt:Date.parse('2026-08-17T10:00:01Z'), agents:[{ runtimeId:'rt', paneKey, repoId:'repo-uuid', terminal:{}, placement:{repo:'sample-repo',path:'/safe',branch:'refs/heads/feat/x'}, agentType:'codex', state, ...(toolName ? {toolName}:{}), updatedAt }], terminals:terminals?normalizeTerminals(terminalRaw):[] });
+
+describe('label formatters', () => {
+  test('formats agent types with proper capitalization for known harnesses and passes unknown types through', () => {
+    expect(formatAgentType('claude')).toBe('Claude');
+    expect(formatAgentType('CLAUDE')).toBe('Claude');
+    expect(formatAgentType('Claude')).toBe('Claude');
+    expect(formatAgentType('codex')).toBe('Codex');
+    expect(formatAgentType('antigravity')).toBe('Antigravity');
+    expect(formatAgentType('custom_agent')).toBe('custom_agent');
+    expect(formatAgentType(undefined)).toBe('Agent');
+    expect(formatAgentType('')).toBe('Agent');
+    expect(formatAgentType('   ')).toBe('Agent');
+  });
+
+  test('strips refs/heads, refs/remotes, and handles detached/absent branches', () => {
+    expect(formatBranch('refs/heads/main')).toBe('main');
+    expect(formatBranch('refs/heads/fix/41328-convert-carries-timeline')).toBe('fix/41328-convert-carries-timeline');
+    expect(formatBranch('refs/remotes/origin/develop')).toBe('origin/develop');
+    expect(formatBranch('refs/tags/v1.0.0')).toBe('v1.0.0');
+    expect(formatBranch('feat/simple')).toBe('feat/simple');
+    expect(formatBranch('')).toBeUndefined();
+    expect(formatBranch('   ')).toBeUndefined();
+    expect(formatBranch('refs/heads/')).toBeUndefined();
+    expect(formatBranch(undefined)).toBeUndefined();
+  });
+
+  test('derives room names preferring repo name over repoId and falls back to path basename', () => {
+    expect(formatRoomName({ repo: 'orca-pixel-office' }, 'uuid-123')).toBe('orca-pixel-office');
+    expect(formatRoomName({ path: '/Users/sascha/gitroot/my-folder' }, 'folder-workspace:uuid')).toBe('my-folder');
+    expect(formatRoomName({ path: 'C:\\projects\\win-folder\\' }, 'folder-workspace:uuid')).toBe('win-folder');
+    expect(formatRoomName({}, 'repo-fallback')).toBe('repo-fallback');
+    expect(formatRoomName({}, 'folder-workspace:uuid')).toBe('workspace');
+    expect(formatRoomName({})).toBe('workspace');
+  });
+
+  test('constructs readable display names', () => {
+    expect(formatDisplayName('claude', 'refs/heads/main')).toBe('Claude / main');
+    expect(formatDisplayName('codex', 'refs/heads/docs/setup')).toBe('Codex / docs/setup');
+    expect(formatDisplayName('antigravity', 'refs/heads/fix/123')).toBe('Antigravity / fix/123');
+    expect(formatDisplayName('claude', '')).toBe('Claude');
+    expect(formatDisplayName('claude', undefined)).toBe('Claude');
+    expect(formatDisplayName('unknown_harness', 'refs/heads/feat/custom')).toBe('unknown_harness / feat/custom');
+    expect(formatDisplayName(undefined, undefined)).toBe('Agent');
+  });
+});
 
 describe('privacy and schema boundary', () => {
   test('copies only allowlisted fields, derives paneKey, and sanitizes errors', () => {
     const normalized = normalizeWorktrees(raw); const terminals = normalizeTerminals(terminalRaw);
-    expect(normalized).toEqual([{ runtimeId:'rt', worktreeId:'wt', repoId:'repo', hostId:'host', paneKey, terminal:{}, placement:{path:'/safe',branch:'feat/x'}, agentType:'codex', state:'working', toolName:'mystery_tool', updatedAt:'2026-08-17T10:00:00Z' }]);
+    expect(normalized).toEqual([{ runtimeId:'rt', worktreeId:'wt', repoId:'repo-uuid', hostId:'host', paneKey, terminal:{}, placement:{repo:'sample-repo',path:'/safe',branch:'refs/heads/feat/x'}, agentType:'codex', state:'working', toolName:'mystery_tool', updatedAt:'2026-08-17T10:00:00Z' }]);
     expect(terminals).toEqual([{ paneKey, handle:'term', incarnationId:'inc' }]);
     const serialized = JSON.stringify({ normalized, terminals, error:safeCliError('orca worktree ps', { code:1, message:JSON.stringify(raw) }).message });
     for (const forbidden of ['prompt','toolInput','lastAssistantMessage','preview','taskTitle','displayName','secret']) expect(serialized).not.toContain(forbidden);
@@ -57,12 +103,53 @@ test('collector gates polling and checks dispatched tasks before worker metadata
   expect(calls).toEqual([]); await collector.addClient(); expect(calls).toEqual(['worktree ps --json','terminal list --json','orchestration task-list --status dispatched --json']); expect(seen).toEqual([true]); collector.removeClient(); await collector.dispose();
 });
 
-test('provider exposes stream presentation and metadata seams', async () => {
+test('provider exposes stream presentation and metadata seams with clean labels', async () => {
   const provider = new OrcaBridgeProvider({ run:async args=>args[0]==='worktree'?raw:args[0]==='terminal'?terminalRaw:{result:{tasks:[]}}, worktreeIntervalMs:60_000, terminalIntervalMs:60_000 });
   const emitted:unknown[]=[]; const dispose=await provider.start(value=>emitted.push(value));
   expect(provider.readingTools.has('Read')).toBe(true); expect(provider.formatToolStatus('mystery_tool')).toBe('mystery_tool');
-  expect(provider.getSessionMeta('rt:tab:leaf:inc')).toEqual({folderName:'repo',displayName:'codex / feat/x',remoteLabel:'host'});
+  expect(provider.getSessionMeta('rt:tab:leaf:inc')).toEqual({folderName:'sample-repo',displayName:'Codex / feat/x',remoteLabel:'host'});
   expect(emitted).toHaveLength(2); await dispose();
+});
+
+test('handles folder workspaces without branch or git repo', async () => {
+  const folderRaw = {
+    result: {
+      worktrees: [{
+        worktreeId: 'folder:123',
+        runtimeId: 'rt',
+        repoId: 'folder-workspace:9b807680-76ce-4f5f-a15c-0268be8e5069',
+        repo: 'genusswerte',
+        path: '/Users/sascha/gitroot/genusswerte',
+        branch: '',
+        workspaceKind: 'folder-workspace',
+        agents: [{ paneKey, agentType: 'claude', state: 'done', updatedAt: '2026-08-17T10:00:00Z' }]
+      }]
+    }
+  };
+  const provider = new OrcaBridgeProvider({ run: async args => args[0] === 'worktree' ? folderRaw : args[0] === 'terminal' ? terminalRaw : { result: { tasks: [] } }, worktreeIntervalMs: 60_000, terminalIntervalMs: 60_000 });
+  const dispose = await provider.start(() => {});
+  expect(provider.getSessionMeta('rt:tab:leaf:inc')).toEqual({ folderName: 'genusswerte', displayName: 'Claude' });
+  await dispose();
+});
+
+test('passes unknown agentType through and strips refs/remotes branch', async () => {
+  const customRaw = {
+    result: {
+      worktrees: [{
+        worktreeId: 'wt-custom',
+        runtimeId: 'rt',
+        repoId: 'custom-uuid',
+        repo: 'custom-repo',
+        path: '/path/to/custom-repo',
+        branch: 'refs/remotes/origin/feat/feature-1',
+        agents: [{ paneKey, agentType: 'custom_orchestrator', state: 'done', updatedAt: '2026-08-17T10:00:00Z' }]
+      }]
+    }
+  };
+  const provider = new OrcaBridgeProvider({ run: async args => args[0] === 'worktree' ? customRaw : args[0] === 'terminal' ? terminalRaw : { result: { tasks: [] } }, worktreeIntervalMs: 60_000, terminalIntervalMs: 60_000 });
+  const dispose = await provider.start(() => {});
+  expect(provider.getSessionMeta('rt:tab:leaf:inc')).toEqual({ folderName: 'custom-repo', displayName: 'custom_orchestrator / origin/feat/feature-1' });
+  await dispose();
 });
 
 function builtRuntimeRoot(): string {
