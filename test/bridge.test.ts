@@ -82,6 +82,28 @@ describe('reconciliation', () => {
     expect(end[0]!.event).toEqual({kind:'toolEnd',toolId:toolStart.toolId});
     expect(end[1]!.event).toEqual({kind:'turnEnd'});
   });
+  test('restarts the same tool on re-entering working and represents working without a tool', () => {
+    const r = new Reconciler();
+
+    const firstWorking = r.replace(snapshot('working', 'shell'));
+    expect(firstWorking.map(x=>x.event.kind)).toEqual(['sessionStart','toolStart']);
+    expect(firstWorking[1]!.event).toMatchObject({kind:'toolStart',toolName:'Bash'});
+
+    const done = r.apply(snapshot('done', 'shell'));
+    expect(done.map(x=>x.event.kind)).toEqual(['toolEnd','turnEnd']);
+
+    const workingAgain = r.apply(snapshot('working', 'shell'));
+    expect(workingAgain.map(x=>x.event.kind)).toEqual(['toolStart']);
+    expect(workingAgain[0]!.event).toMatchObject({kind:'toolStart',toolName:'Bash'});
+
+    expect(r.apply(snapshot('working', 'shell'))).toEqual([]);
+
+    const noTool = snapshot('working');
+    delete noTool.agents[0]!.toolName;
+    const workingWithoutTool = r.apply(noTool);
+    expect(workingWithoutTool.map(x=>x.event.kind)).toEqual(['toolEnd','toolStart']);
+    expect(workingWithoutTool[1]!.event).toMatchObject({kind:'toolStart',toolName:'Working'});
+  });
   test('joins terminal incarnation and ends only after its disappearance', () => {
     const r = new Reconciler(); r.replace(snapshot('done',undefined));
     const absentAgent = snapshot('done',undefined); absentAgent.agents=[];

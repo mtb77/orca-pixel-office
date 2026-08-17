@@ -30,7 +30,6 @@ export class Reconciler {
       if (previous?.incarnationId && incarnationId && previous.incarnationId !== incarnationId) {
         this.end(previous, events, terminals); this.tracked.delete(key); previous = undefined;
       }
-      const isNew = !previous;
       if (!previous) {
         const sessionId = `${key}:${incarnationId ?? 'unknown'}`;
         previous = { agent, sessionId, ...(incarnationId ? { incarnationId } : {}), lastUpdated: snapshot.collectedAt };
@@ -55,13 +54,14 @@ export class Reconciler {
       const observedUpdate = time(agent, previous.lastUpdated);
       const state = snapshot.collectedAt - observedUpdate > this.staleAfterMs ? 'unknown' : agent.state;
       const wasWorking = previous.agent.state === 'working'; const working = state === 'working';
-      const rawTool = working ? agent.toolName : undefined;
-      if (previous.activeTool && (!working || rawTool !== previous.agent.toolName)) {
+      const rawTool = working ? agent.toolName?.trim() || 'Working' : undefined;
+      const toolName = rawTool ? canonicalToolName(agent.agentType, rawTool) : undefined;
+      if (previous.activeTool && (!working || toolName !== previous.activeTool.name)) {
         events.push(envelope(previous.sessionId, { kind: 'toolEnd', toolId: previous.activeTool.id })); delete previous.activeTool;
       }
-      if (working && rawTool && (isNew || rawTool !== previous.agent.toolName)) {
-        const name = canonicalToolName(agent.agentType, rawTool); const id = `${previous.sessionId}:${name}:${++this.counter}`;
-        previous.activeTool = { id, name }; events.push(envelope(previous.sessionId, { kind: 'toolStart', toolId: id, toolName: name }));
+      if (working && toolName && !previous.activeTool) {
+        const id = `${previous.sessionId}:${toolName}:${++this.counter}`;
+        previous.activeTool = { id, name: toolName }; events.push(envelope(previous.sessionId, { kind: 'toolStart', toolId: id, toolName }));
       }
       if (wasWorking && !working) events.push(envelope(previous.sessionId, { kind: 'turnEnd' }));
       previous.agent = { ...agent, state }; previous.lastUpdated = Math.max(previous.lastUpdated, observedUpdate);
