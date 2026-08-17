@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Project Orca-managed agents into a local Pixel Agents office.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mtb77/orca-pixel-office.git"
@@ -17,12 +17,15 @@
     "dist/src/",
     "scripts/cli.mjs",
     "vendor/pixel-agents/dist/stream-runtime.js",
+    "vendor/pixel-agents/dist/assets/",
     "vendor/pixel-agents/dist/webview/",
     "vendor/pixel-agents/LICENSE",
     "vendor/pixel-agents/package.json",
     "README.md"
   ],
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "bun test ./test/*.ts",

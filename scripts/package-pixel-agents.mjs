@@ -10,6 +10,7 @@ const forkRoot = resolve(packageRoot, '..', 'pixel-agents-orca');
 const vendorRoot = join(packageRoot, 'vendor', 'pixel-agents');
 const requiredSources = [
   join(forkRoot, 'dist', 'stream-runtime.js'),
+  join(forkRoot, 'dist', 'assets'),
   join(forkRoot, 'dist', 'webview'),
   join(forkRoot, 'LICENSE')
 ];
@@ -35,8 +36,9 @@ for (const source of requiredSources) {
 rmSync(vendorRoot, { recursive: true, force: true });
 mkdirSync(join(vendorRoot, 'dist'), { recursive: true });
 cpSync(requiredSources[0], join(vendorRoot, 'dist', 'stream-runtime.js'));
-cpSync(requiredSources[1], join(vendorRoot, 'dist', 'webview'), { recursive: true });
-cpSync(requiredSources[2], join(vendorRoot, 'LICENSE'));
+cpSync(requiredSources[1], join(vendorRoot, 'dist', 'assets'), { recursive: true });
+cpSync(requiredSources[2], join(vendorRoot, 'dist', 'webview'), { recursive: true });
+cpSync(requiredSources[3], join(vendorRoot, 'LICENSE'));
 writeFileSync(join(vendorRoot, 'package.json'), '{\n  "private": true,\n  "type": "commonjs"\n}\n');
 
-console.log('Packaged Pixel Agents runtime, webview, CommonJS boundary, and MIT license in vendor/pixel-agents/.');
+console.log('Packaged Pixel Agents runtime, assets, webview, CommonJS boundary, and MIT license in vendor/pixel-agents/.');
