@@ -1,10 +1,26 @@
 # Orca Pixel Office
 
-Orca plugin for visualizing all Orca-managed agents in a Pixel Agents office.
+Projects Orca-managed agents into one Pixel Agents office room per repository. Milestone 1 provides a dependency-free TypeScript bridge over Orca's public JSON CLI snapshots; it deliberately never reads terminal output, prompts, tool input, previews, or assistant messages.
+
+## Bridge core
+
+- `src/collector.ts` polls `orca worktree ps --json` and `orca terminal list --json`, with configurable jittered intervals and a connected-client gate.
+- `src/normalizer.ts` is the privacy boundary: only explicitly allowlisted identity, placement, activity, and timestamp fields survive.
+- `src/reconciler.ts` detects coarse lifecycle edges while terminal incarnation identity prevents pane reuse.
+- `src/tools.ts` maps harness-native tool names to office vocabulary.
+- `src/provider.ts` exposes the dependency-free, kind-based event-envelope stream provider used by the Pixel Agents integration. Session display metadata stays outside events and is available through `getSessionMeta`; the Milestone 3 seam decides how that metadata reaches the renderer.
+
+The package targets plain Node.js 20 or newer. Bun is used only for development:
+
+```sh
+bun install
+bun test
+bun run build
+```
 
 ## Status
 
-This repository currently contains the initial plugin scaffold and integration design. The read-only Orca event-surface spike is documented in [`docs/event-surface-spike.md`](docs/event-surface-spike.md); no runtime bridge has been implemented yet.
+Milestone 1 (bridge core) is implemented; Milestone 2 (the `StreamProvider` seam) lives in the Pixel Agents fork. Milestone 3 still has to wire the two together, including how a session address and its display metadata reach the seam. The read-only Orca event-surface spike behind these decisions is documented in [`docs/event-surface-spike.md`](docs/event-surface-spike.md).
 
 Product and architecture decisions are recorded in [`GLOSSARY.md`](GLOSSARY.md), [`docs/adr/`](docs/adr/), and [`docs/implementation-plan.md`](docs/implementation-plan.md). Polling is the permanent architecture; Orca itself is never modified (ADR 0001).
 
