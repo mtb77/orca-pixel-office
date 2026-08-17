@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Verify and publish to npm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orca-pixel-office
+
+    steps:
+      - name: Check out Orca Pixel Office
+        uses: actions/checkout@v4
+        with:
+          path: orca-pixel-office
+
+      - name: Check out Pixel Agents fork
+        uses: actions/checkout@v4
+        with:
+          repository: mtb77/pixel-agents
+          ref: main
+          path: pixel-agents-orca
+          token: ${{ secrets.PIXEL_AGENTS_REPO_TOKEN || github.token }}
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org
+
+      - name: Set up Bun for development checks
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Orca Pixel Office dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Pixel Agents dependencies
+        run: npm ci
+        working-directory: pixel-agents-orca
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Build TypeScript
+        run: bun run build
+
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$package_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $package_version." >&2
+            exit 1
+          fi
+
+      - name: Pack npm tarball
+        id: pack
+        shell: bash
+        run: |
+          npm pack
+          tarball="$(node -p "const p = require('./package.json'); p.name.replace(/^@/, '').replace('/', '-') + '-' + p.version + '.tgz'")"
+          test -f "$tarball"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Verify packed tarball with plain Node.js
+        shell: bash
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          node_bin="$(dirname "$(command -v node)")"
+          plain_path="$node_bin:/usr/local/bin:/usr/bin:/bin"
+          if PATH="$plain_path" command -v bun >/dev/null 2>&1; then
+            echo "Bun unexpectedly remains available during packed-tarball verification." >&2
+            exit 1
+          fi
+          PATH="$plain_path" node scripts/verify-packed.mjs "$TARBALL"
+
+      - name: Enforce publishable license decision
+        shell: bash
+        run: |
+          package_license="$(node -p "require('./package.json').license")"
+          if [ "$package_license" = "UNLICENSED" ]; then
+            echo "Refusing to publish while package.json declares UNLICENSED." >&2
+            exit 1
+          fi
+
+      - name: Guard npm publication
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN is required to publish." >&2
+            exit 1
+          fi
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+          if npm view "$package_name@$package_version" version >npm-view.stdout 2>npm-view.stderr; then
+            echo "$package_name@$package_version already exists on npm; refusing to republish." >&2
+            exit 1
+          fi
+          if ! grep -q 'E404' npm-view.stderr; then
+            cat npm-view.stderr >&2
+            echo "Could not confirm that the npm version is unpublished." >&2
+            exit 1
+          fi
+
+      - name: Publish to npm with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "$TARBALL" --access public --provenance

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    name: Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', 'current']
+    defaults:
+      run:
+        working-directory: orca-pixel-office
+
+    steps:
+      - name: Check out Orca Pixel Office
+        uses: actions/checkout@v4
+        with:
+          path: orca-pixel-office
+
+      - name: Check out Pixel Agents fork
+        uses: actions/checkout@v4
+        with:
+          repository: mtb77/pixel-agents
+          ref: main
+          path: pixel-agents-orca
+          token: ${{ secrets.PIXEL_AGENTS_REPO_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up Bun for development checks
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Orca Pixel Office dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Pixel Agents dependencies
+        run: npm ci
+        working-directory: pixel-agents-orca
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Build TypeScript
+        run: bun run build
+
+      - name: Pack npm tarball
+        id: pack
+        shell: bash
+        run: |
+          npm pack
+          tarball="$(node -p "const p = require('./package.json'); p.name.replace(/^@/, '').replace('/', '-') + '-' + p.version + '.tgz'")"
+          test -f "$tarball"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Verify packed tarball with plain Node.js
+        shell: bash
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          node_bin="$(dirname "$(command -v node)")"
+          plain_path="$node_bin:/usr/local/bin:/usr/bin:/bin"
+          if PATH="$plain_path" command -v bun >/dev/null 2>&1; then
+            echo "Bun unexpectedly remains available during packed-tarball verification." >&2
+            exit 1
+          fi
+          PATH="$plain_path" node scripts/verify-packed.mjs "$TARBALL"

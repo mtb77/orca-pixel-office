@@ -111,6 +111,23 @@ The public npm package is named `orca-pixel-office`; nothing has been published 
 
 `npm pack` and `npm publish --dry-run` run `prepack`, which builds the sibling Pixel Agents fork and recreates `vendor/pixel-agents/`. The tarball therefore contains its required server entry and webview without committing generated assets to Git. The fork runtime's Fastify production dependencies are installed through the package's normal npm dependency graph rather than copied into `vendor/`.
 
+## CI/CD and releases
+
+The `CI` workflow runs for pushes and pull requests against `main` on both Node.js 20 and the current Node.js release. Each job checks out this repository as `orca-pixel-office/` and `mtb77/pixel-agents` as the adjacent `pixel-agents-orca/` directory required by `prepack`. It installs Bun only for the development test and TypeScript build, then creates an npm tarball and runs the existing plain-Node verification script with Bun removed from `PATH`:
+
+```sh
+bun run test
+bun run build
+npm pack
+node scripts/verify-packed.mjs orca-pixel-office-<version>.tgz
+```
+
+If `mtb77/pixel-agents` is private, add a repository Actions secret named `PIXEL_AGENTS_REPO_TOKEN`. It must contain a fine-grained personal access token with read access to that repository's contents. For a public fork, the workflow falls back to the standard `GITHUB_TOKEN`.
+
+The `Release` workflow runs only for tags matching `v*`. Before publishing, it requires the tag to equal `v` plus the version in `package.json`, builds and verifies the packed artifact under plain Node.js, checks that the version is not already present on npm, and requires an `NPM_TOKEN` repository secret with publish access. It publishes with npm provenance using GitHub's OIDC token.
+
+The package currently declares `"license": "UNLICENSED"`. The release workflow deliberately refuses to publish while that value remains; choosing and changing the package license is an owner decision that must happen before the first release.
+
 ## Related project
 
 The Pixel Agents integration fork is checked out next to this repository as `../pixel-agents-orca` and tracks `pixel-agents-hq/pixel-agents` through its `upstream` Git remote.
