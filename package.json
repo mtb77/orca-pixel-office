@@ -1,13 +1,40 @@
 {
   "name": "orca-pixel-office",
   "version": "0.1.0",
-  "private": true,
+  "description": "Project Orca-managed agents into a local Pixel Agents office.",
   "type": "module",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mtb77/orca-pixel-office.git"
+  },
+  "homepage": "https://github.com/mtb77/orca-pixel-office#readme",
+  "bugs": "https://github.com/mtb77/orca-pixel-office/issues",
+  "bin": {
+    "orca-pixel-office": "scripts/cli.mjs"
+  },
+  "files": [
+    "dist/src/",
+    "scripts/cli.mjs",
+    "vendor/pixel-agents/dist/stream-runtime.js",
+    "vendor/pixel-agents/dist/webview/",
+    "vendor/pixel-agents/LICENSE",
+    "vendor/pixel-agents/package.json",
+    "README.md"
+  ],
   "engines": { "node": ">=20" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "bun test ./test/*.ts",
-    "live-verify": "bun run scripts/live-verify.ts"
+    "live-verify": "bun run scripts/live-verify.ts",
+    "prepack": "npm run build && node scripts/package-pixel-agents.mjs",
+    "verify:packed": "node scripts/verify-packed.mjs"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^10.1.2",
+    "@fastify/websocket": "^11.2.0",
+    "fastify": "^5.8.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

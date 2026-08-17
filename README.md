@@ -4,14 +4,22 @@ Projects Orca-managed agents into one Pixel Agents office room per repository. T
 
 ## Install
 
-Development uses Bun for dependency installation and validation. A built Pixel Agents fork must be available as described under Runtime lookup.
+Node.js 20 or newer is required. Start the published package without a permanent install:
+
+```sh
+npx orca-pixel-office
+```
+
+The command prints the private local office URL once and stays alive while the office is running. Open that URL in a browser. It contains the ephemeral bearer token, so do not redirect the command output to a file or share the URL.
+
+Press Ctrl-C to stop the office. SIGINT and SIGTERM both trigger a clean `PluginRuntime.stop()` before the command exits.
+
+For development from this repository:
 
 ```sh
 bun install
 bun run build
 ```
-
-The published npm installation described by ADR 0002 is Milestone 4 work and is not available yet.
 
 ## Start and open the office
 
@@ -54,6 +62,16 @@ The runtime prefers `vendor/pixel-agents/`, then falls back to the sibling devel
 
 ## Scripts
 
+### `npm run prepack`
+
+Builds this package and the sibling `../pixel-agents-orca` checkout, then recreates the ignored `vendor/pixel-agents/` publish artifact. The artifact contains only `dist/stream-runtime.js`, the complete `dist/webview/`, a small CommonJS package boundary required by Node, and the fork's upstream MIT `LICENSE`. The runtime's Fastify dependencies are declared as this package's production dependencies and installed normally by npm; `node_modules` is not vendored.
+
+Release machines must have the sibling fork checked out with its dependencies installed. The script does not modify the fork's source.
+
+### `npm run verify:packed -- <tarball>`
+
+Installs a packed tarball into a clean temporary directory, launches its CLI with the current plain Node executable, verifies authenticated and unauthenticated HTTP responses, sends SIGTERM, and confirms a clean exit. The bearer token remains in process memory and is redacted from output; the temporary installation is removed afterward.
+
 ### `bun run live-verify`
 
 Starts the runtime, connects one office client, and prints every agent the bridge projects with its room and display name, then shuts the runtime down. Use it to check the projection against real Orca agents after changing the collector, reconciler, or labels.
@@ -89,7 +107,9 @@ Product and architecture decisions are recorded in [`GLOSSARY.md`](GLOSSARY.md),
 
 ## Distribution
 
-The plugin will be published as the public npm package `orca-pixel-office` with the built Pixel Agents fork bundled into the tarball at publish time (`vendor/pixel-agents/`, MIT license included). Third parties install and start it with `npx orca-pixel-office`. See ADR 0002; nothing has been published yet.
+The public npm package is named `orca-pixel-office`; nothing has been published yet. Its explicit package allowlist includes the compiled bridge/runtime, CLI entry, README, and the publish-time Pixel Agents bundle. Source files, tests, repository metadata, and scratch output are excluded.
+
+`npm pack` and `npm publish --dry-run` run `prepack`, which builds the sibling Pixel Agents fork and recreates `vendor/pixel-agents/`. The tarball therefore contains its required server entry and webview without committing generated assets to Git. The fork runtime's Fastify production dependencies are installed through the package's normal npm dependency graph rather than copied into `vendor/`.
 
 ## Related project
 
