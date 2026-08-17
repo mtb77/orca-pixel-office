@@ -147,4 +147,13 @@ Validate the plugin manifest and structure with:
 python3 /Users/sascha/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .
 ```
 
-No installation or marketplace entry has been created yet.
+## Marketplace
+
+This repository serves as a self-contained Orca plugin marketplace via its root `orca-marketplace.json` manifest.
+
+To add this marketplace and install the plugin in Orca:
+1. In Orca, open Settings and navigate to the plugin marketplace configuration.
+2. Add this repository's Git URL (`https://github.com/mtb77/orca-pixel-office.git`) as a marketplace source.
+3. Discover and install **Orca Pixel Office** (`mtb77.orca-pixel-office`) from the available plugins list.
+
+*(Note: Orca currently manages external plugin marketplaces and plugin installations via the Orca graphical interface rather than dedicated CLI commands.)*

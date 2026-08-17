@@ -1,0 +1,18 @@
+{
+  "name": "Orca Pixel Office",
+  "owner": "mtb77",
+  "plugins": [
+    {
+      "id": "mtb77.orca-pixel-office",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/mtb77/orca-pixel-office.git",
+        "ref": "main"
+      },
+      "description": "Launch and manage a Pixel Agents office for all Orca-managed agents.",
+      "categories": [
+        "productivity"
+      ]
+    }
+  ]
+}
