@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { SnapshotCollector } from '../src/collector.js';
 import { normalizeTerminals, normalizeWorktrees, safeCliError } from '../src/normalizer.js';
 import { OrcaBridgeProvider } from '../src/provider.js';
 import { Reconciler } from '../src/reconciler.js';
+import { PluginRuntime, findPixelAgentsRuntime, type RuntimeLauncher, type RuntimeMessage, type RuntimeProcess } from '../src/runtime.js';
 import type { Snapshot } from '../src/types.js';
 
 const paneKey = 'tab:leaf';
@@ -57,6 +61,61 @@ test('provider exposes stream presentation and metadata seams', async () => {
   const provider = new OrcaBridgeProvider({ run:async args=>args[0]==='worktree'?raw:args[0]==='terminal'?terminalRaw:{result:{tasks:[]}}, worktreeIntervalMs:60_000, terminalIntervalMs:60_000 });
   const emitted:unknown[]=[]; const dispose=await provider.start(value=>emitted.push(value));
   expect(provider.readingTools.has('Read')).toBe(true); expect(provider.formatToolStatus('mystery_tool')).toBe('mystery_tool');
-  expect(provider.getSessionMeta('rt:tab:leaf:inc')).toEqual({roomId:'repo',displayName:'codex / feat/x',agentType:'codex',branch:'feat/x',hostId:'host',remote:true});
+  expect(provider.getSessionMeta('rt:tab:leaf:inc')).toEqual({folderName:'repo',displayName:'codex / feat/x',remoteLabel:'host'});
   expect(emitted).toHaveLength(2); await dispose();
+});
+
+function builtRuntimeRoot(): string {
+  const packageRoot=mkdtempSync(join(tmpdir(),'orca-pixel-office-'));
+  const root=join(packageRoot,'vendor','pixel-agents');
+  mkdirSync(join(root,'dist','webview'),{recursive:true});
+  writeFileSync(join(root,'dist','stream-runtime.js'),'');
+  writeFileSync(join(root,'dist','webview','index.html'),'');
+  return packageRoot;
+}
+
+test('runtime lookup prefers the bundled build', () => {
+  const packageRoot=builtRuntimeRoot();
+  expect(findPixelAgentsRuntime(packageRoot).root).toBe(join(packageRoot,'vendor','pixel-agents'));
+});
+
+test('lazy runtime start is idempotent and defaults to loopback', async () => {
+  const sent:unknown[]=[]; let launches=0; let onMessage:((message:RuntimeMessage)=>void)|undefined;
+  const process:RuntimeProcess={send:message=>sent.push(message),stop:async()=>{}};
+  const launcher:RuntimeLauncher={launch:async(_location,callback)=>{launches++;onMessage=callback;return process;}};
+  const packageRoot=builtRuntimeRoot();
+  const runtime=new PluginRuntime({packageRoot,launcher,tokenFactory:()=> 'private-token'});
+  const first=runtime.open(); const second=runtime.open();
+  expect(first).toBe(second); expect(launches).toBe(1);
+  onMessage?.({type:'ready',port:4321});
+  expect(await first).toBe('http://127.0.0.1:4321/?token=private-token');
+  expect(sent).toEqual([{type:'start',host:'127.0.0.1',port:0,token:'private-token',bridgeModule:join(packageRoot,'dist','src','provider.js')}]);
+  await runtime.stop();
+});
+
+test('runtime token is redacted from child error paths', async () => {
+  const token='never-print-this-token'; let onMessage:((message:RuntimeMessage)=>void)|undefined;
+  const launcher:RuntimeLauncher={launch:async(_location,callback)=>{onMessage=callback;return {send:()=>{},stop:async()=>{}};}};
+  const runtime=new PluginRuntime({packageRoot:builtRuntimeRoot(),launcher,tokenFactory:()=>token});
+  const opening=runtime.open(); onMessage?.({type:'error',message:`startup failed for ${token}`});
+  try { await opening; throw new Error('expected failure'); } catch (error) {
+    expect((error as Error).message).not.toContain(token);
+    expect((error as Error).message).toContain('[redacted]');
+  }
+});
+
+test('runtime stops after the last-client grace and explicit stop is immediate', async () => {
+  let onMessage:((message:RuntimeMessage)=>void)|undefined; let stopped=0; let scheduled:(()=>void)|undefined;
+  const launcher:RuntimeLauncher={launch:async(_location,callback)=>{onMessage=callback;return {send:()=>{},stop:async()=>{stopped++;}};}};
+  const runtime=new PluginRuntime({
+    packageRoot:builtRuntimeRoot(),launcher,tokenFactory:()=> 'token',shutdownGraceMs:600_000,
+    setTimer:(callback,delay)=>{expect(delay).toBe(600_000);scheduled=callback;return {} as NodeJS.Timeout;},
+    clearTimer:()=>{scheduled=undefined;}
+  });
+  const opening=runtime.open(); onMessage?.({type:'ready',port:1234}); await opening;
+  onMessage?.({type:'clients',count:0}); expect(scheduled).toBeDefined();
+  onMessage?.({type:'clients',count:1}); expect(scheduled).toBeUndefined();
+  onMessage?.({type:'clients',count:0}); scheduled?.(); await new Promise(resolve=>setTimeout(resolve,0)); expect(stopped).toBe(1);
+  const reopened=runtime.open(); onMessage?.({type:'ready',port:1235}); await reopened;
+  await runtime.stop(); expect(stopped).toBe(2);
 });

@@ -45,6 +45,7 @@ export type AgentEvent =
 
 export interface AgentEventEnvelope { sessionId: string; event: AgentEvent }
 export interface SessionMeta { roomId: string; displayName: string; agentType: string; branch?: string; hostId?: string; remote: boolean }
+export interface StreamSessionMeta { folderName?: string; displayName?: string; remoteLabel?: string }
 
 export interface AgentEventProvider {
   readonly kind: 'stream';
@@ -54,4 +55,5 @@ export interface AgentEventProvider {
   readonly readingTools: ReadonlySet<string>;
   formatToolStatus(toolName: string): string;
   start(emit: (envelope: AgentEventEnvelope) => void): Promise<() => Promise<void>>;
+  getSessionMeta?(sessionId: string): StreamSessionMeta | undefined;
 }

@@ -1,6 +1,56 @@
 # Orca Pixel Office
 
-Projects Orca-managed agents into one Pixel Agents office room per repository. Milestone 1 provides a dependency-free TypeScript bridge over Orca's public JSON CLI snapshots; it deliberately never reads terminal output, prompts, tool input, previews, or assistant messages.
+Projects Orca-managed agents into one Pixel Agents office room per repository. The dependency-free TypeScript bridge uses Orca's public JSON CLI snapshots; it deliberately never reads terminal output, prompts, tool input, previews, or assistant messages.
+
+## Install
+
+Development uses Bun for dependency installation and validation. A built Pixel Agents fork must be available as described under Runtime lookup.
+
+```sh
+bun install
+bun run build
+```
+
+The published npm installation described by ADR 0002 is Milestone 4 work and is not available yet.
+
+## Start and open the office
+
+`PluginRuntime.open()` lazily starts the managed Pixel Agents process tree and returns the authenticated URL that the Orca integration should hand directly to its browser tab. Repeated calls attach to the same in-process runtime and return the same pending or resolved URL.
+
+```js
+import { PluginRuntime } from './dist/src/index.js';
+
+const office = new PluginRuntime();
+const privateOfficeUrl = await office.open();
+// Hand privateOfficeUrl directly to the Orca browser tab. Do not log it.
+```
+
+The bearer token is generated for each server start, retained only in memory, and passed to the child runtime over Node IPC. Child stdout and stderr are not forwarded because authenticated URLs must never enter logs.
+
+## Stop the office
+
+`stop()` tears down the managed process immediately. The runtime also schedules the same teardown ten minutes after the child reports that its last office client disconnected; a reconnect during the grace period cancels shutdown.
+
+```js
+await office.stop();
+```
+
+## Configuration
+
+Pass options to `PluginRuntime` when embedding it:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `host` | `127.0.0.1` | Local bind address handed to the Pixel Agents child runtime. |
+| `port` | `0` | Requested port; zero lets the operating system choose an ephemeral port. |
+| `shutdownGraceMs` | `600000` | Delay after the last office client disconnects before teardown. |
+| `packageRoot` | inferred package root | Override only for tests or a nonstandard installation layout. |
+
+Keep the default loopback bind unless remote access has been deliberately secured.
+
+## Runtime lookup
+
+The runtime prefers `vendor/pixel-agents/`, then falls back to the sibling development checkout at `../pixel-agents-orca`. A usable build must contain both `dist/stream-runtime.js` and `dist/webview/index.html`. The runtime entry is the fork-owned generic composition host: it receives the token, bind configuration, and bridge module path over Node IPC and reports readiness and office-client counts over the same channel. The bridge module must export a named, zero-argument `createStreamProvider()` factory. The ordinary `dist/cli.js` is intentionally not used because it owns a different token lifecycle and cannot compose the plugin's stream provider.
 
 ## Bridge core
 
@@ -20,7 +70,7 @@ bun run build
 
 ## Status
 
-Milestone 1 (bridge core) is implemented; Milestone 2 (the `StreamProvider` seam) lives in the Pixel Agents fork. Milestone 3 still has to wire the two together, including how a session address and its display metadata reach the seam. The read-only Orca event-surface spike behind these decisions is documented in [`docs/event-surface-spike.md`](docs/event-surface-spike.md).
+Milestone 1 (bridge core) and the plugin side of Milestone 3 are implemented. Milestone 2 and the fork-owned runtime composition entry live in the Pixel Agents fork. The read-only Orca event-surface spike behind these decisions is documented in [`docs/event-surface-spike.md`](docs/event-surface-spike.md).
 
 Product and architecture decisions are recorded in [`GLOSSARY.md`](GLOSSARY.md), [`docs/adr/`](docs/adr/), and [`docs/implementation-plan.md`](docs/implementation-plan.md). Polling is the permanent architecture; Orca itself is never modified (ADR 0001).
 
